@@ -21,18 +21,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { prompt, accessCode } = req.body || {};
-
-    if (!prompt) {
-      res.status(400).json({ error: 'Prompt is required' });
-      return;
-    }
+    const { prompt, accessCode, action } = req.body || {};
 
     // 檢查通行密碼（若環境變數有設置 ACCESS_CODE，則進行核對）
     const serverAccessCode = process.env.ACCESS_CODE;
     if (serverAccessCode && serverAccessCode.trim() !== '') {
       if (!accessCode || accessCode.trim() !== serverAccessCode.trim()) {
-        res.status(401).json({ error: '通行密碼錯誤，請在設定中輸入正確的通行密碼。' });
+        res.status(401).json({ error: '通行密碼錯誤，請確認輸入正確的通行密碼。' });
         return;
       }
     }
@@ -46,7 +41,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    // 若為連線測試請求，快速驗證金鑰狀態後直接回傳成功
+    if (action === 'test') {
+      res.status(200).json({
+        ok: true,
+        message: '驗證成功！通行密碼正確，且 Vercel 雲端 AI 服務已就緒！',
+      });
+      return;
+    }
+
+    if (!prompt) {
+      res.status(400).json({ error: 'Prompt is required' });
+      return;
     const cleanKey = apiKey.trim();
+
 
     // 優先候選模型（遇到壅塞自動平滑重試）
     const candidateModels = [

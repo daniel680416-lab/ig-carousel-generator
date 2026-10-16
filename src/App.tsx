@@ -345,11 +345,42 @@ export function App() {
 
   const handleTestKey = async () => {
     setErrorMsg(null);
+    setStatusMsg('正在檢測連線狀態…');
+
+    // 1. 優先測試 Vercel 雲端後端代理 (/api/generate)
+    try {
+      const proxyRes = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'test',
+          accessCode: apiKey.trim(),
+        }),
+      });
+
+      if (proxyRes.ok) {
+        const data = await proxyRes.json();
+        setStatusMsg(`✅ ${data.message || '驗證成功！Vercel 雲端 AI 服務已就緒！'}`);
+        return;
+      } else if (proxyRes.status !== 404) {
+        const errData = await proxyRes.json().catch(() => ({}));
+        if (errData.error) {
+          setStatusMsg(null);
+          setErrorMsg(`驗證失敗：${errData.error}`);
+          return;
+        }
+      }
+    } catch {
+      // 本地無 serverless 則繼續嘗試直連測試
+    }
+
+    // 2. 若為本地開發或使用者輸入了個人 Gemini API Key (以 AIzaSy 開頭)
     if (!apiKey.trim()) {
-      setErrorMsg('請先輸入 API Key');
+      setStatusMsg(null);
+      setErrorMsg('請輸入通行密碼，或貼上個人的 Gemini API Key。');
       return;
     }
-    setStatusMsg('正在檢測 API Key…');
+
     try {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`
@@ -363,13 +394,14 @@ export function App() {
           .map((m: { name: string }) => m.name.replace('models/', ''))
           .slice(0, 5)
           .join(', ');
-        setStatusMsg(`檢測成功！可用模型：${names}`);
+        setStatusMsg(`✅ 個人 Key 檢測成功！可用模型：${names}`);
       }
     } catch (err) {
       setStatusMsg(null);
       setErrorMsg(`連線錯誤：${err instanceof Error ? err.message : String(err)}`);
     }
   };
+
 
   /* 文案複製 / 匯出 / 原生分享 */
   const handleCopy = async () => {
