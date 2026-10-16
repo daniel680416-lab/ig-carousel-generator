@@ -1,0 +1,19 @@
+{
+  "name": "IG 圖文輪播產生器",
+  "short_name": "IG輪播",
+  "description": "1:1 自動裁切 · 半透明質感版型 · AI 社群貼文一鍵產生",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080a12",
+  "theme_color": "#080a12",
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
