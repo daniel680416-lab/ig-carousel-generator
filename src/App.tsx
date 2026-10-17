@@ -148,9 +148,9 @@ const inputCls =
 
 export function App() {
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem('gemini_api_key') || '');
-  const [topic, setTopic] = useState('零基礎空中瑜伽體態雕塑入門');
-  const [audience, setAudience] = useState('久坐上班族、初次接觸空瑜的學員、運動新手');
-  const [keyTakeaways, setKeyTakeaways] = useState('克服懸空恐懼、核心借力不手酸、優雅舒展肩頸');
+  const [topic, setTopic] = useState('');
+  const [audience, setAudience] = useState('');
+  const [keyTakeaways, setKeyTakeaways] = useState('');
   const [ctaGoal, setCtaGoal] = useState<CtaGoal>('keyword');
   const [ctaDetail, setCtaDetail] = useState('');
 
@@ -609,7 +609,13 @@ export function App() {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-medium text-slate-300">重點亮點 / 痛點（選填）</label>
-                  <textarea rows={2} className={`${inputCls} resize-none`} value={keyTakeaways} onChange={(e) => setKeyTakeaways(e.target.value)} />
+                  <textarea
+                    rows={2}
+                    className={`${inputCls} resize-none`}
+                    value={keyTakeaways}
+                    onChange={(e) => setKeyTakeaways(e.target.value)}
+                    placeholder="例如：克服懸空恐懼、核心借力不手酸、優雅舒展肩頸"
+                  />
                 </div>
 
                 {/* CTA 行動呼籲目標 (手機自适应网格) */}
