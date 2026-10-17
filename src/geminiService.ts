@@ -226,15 +226,26 @@ export async function generateCarouselContent(
     throw new Error('此 API Key 找不到任何支援 generateContent 的模型，請確認是否為 Google AI Studio 產生的金鑰。');
   }
 
-  // 依序嘗試的模型清單（優先使用速度最快的 Flash 模型）
-  const candidateModels = [
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-2.5-flash',
-    'gemini-1.5-pro',
-  ].filter((m) => availableModels.includes(m));
+  // 優先使用最新世代模型（排除已對新用戶停用的 1.5 / 2.0 / 2.5 舊模型）
+  const preferredOrder = [
+    'gemini-3.8-flash',
+    'gemini-3.8-pro',
+    'gemini-3.5-flash',
+    'gemini-3.1-pro-preview',
+    'gemma-4-26b-a4b-it',
+  ];
 
-  const modelsToTry = candidateModels.length > 0 ? candidateModels : availableModels;
+  const activeAvailable = availableModels.filter(
+    (m) => !m.includes('1.5') && !m.includes('2.0') && !m.includes('2.5')
+  );
+
+  const modelsToTry = Array.from(
+    new Set([
+      'gemini-3.8-flash',
+      ...preferredOrder.filter((m) => activeAvailable.includes(m)),
+      ...activeAvailable,
+    ])
+  );
 
   let lastError: any = null;
 

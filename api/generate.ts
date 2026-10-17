@@ -63,12 +63,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.warn('無法動態查詢模型清單，使用預設候選模型：', fetchErr);
     }
 
-    // 若為連線測試請求，回傳真實的模型狀態
+    // 優先使用最新世代模型（排除已對新用戶停用的 1.5 / 2.0 / 2.5 舊模型）
+    const preferredOrder = [
+      'gemini-3.8-flash',
+      'gemini-3.8-pro',
+      'gemini-3.5-flash',
+      'gemini-3.1-pro-preview',
+      'gemma-4-26b-a4b-it',
+    ];
+
+    const activeAvailable = availableModels.filter(
+      (m) => !m.includes('1.5') && !m.includes('2.0') && !m.includes('2.5')
+    );
+
+    // 若為連線測試請求，回傳真實的可用新世代模型狀態
     if (action === 'test') {
-      const modelNames = availableModels.slice(0, 5).join(', ');
+      const modelNames = (activeAvailable.length > 0 ? activeAvailable : preferredOrder).slice(0, 5).join(', ');
       res.status(200).json({
         ok: true,
-        message: `驗證成功！Vercel 雲端金鑰有效，可用模型：${modelNames || '已就緒'}`,
+        message: `驗證成功！Vercel 雲端金鑰有效，可用模型：${modelNames}`,
       });
       return;
     }
@@ -78,19 +91,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // 依優先權選取該金鑰真實支援的模型
-    const preferredOrder = [
-      'gemini-2.5-flash',
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-exp',
-      'gemini-1.5-flash',
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-pro',
-      'gemini-pro',
-    ];
-
-    const matched = preferredOrder.filter((m) => availableModels.includes(m));
-    const candidateModels = matched.length > 0 ? matched : (availableModels.length > 0 ? availableModels : preferredOrder);
+    // 組合候選清單：強制以 gemini-3.8-flash 為第一優先，接著是其他可用新模型
+    const candidateModels = Array.from(
+      new Set([
+        'gemini-3.8-flash',
+        ...preferredOrder.filter((m) => activeAvailable.includes(m)),
+        ...activeAvailable,
+      ])
+    );
 
     let lastError: any = null;
 
@@ -98,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
       try {
         const modelController = new AbortController();
-        const modelTimeout = setTimeout(() => modelController.abort(), 18000);
+        const modelTimeout = setTimeout(() => modelController.abort(), 25000);
 
         const response = await fetch(url, {
           method: 'POST',
@@ -145,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     res.status(502).json({
-      error: lastError?.message || `AI 伺服器忙碌中。可用模型為：${availableModels.join(', ')}`,
+      error: lastError?.message || `AI 伺服器忙碌中，請稍候重試。`,
     });
   } catch (error: any) {
     console.error('API Error:', error);
