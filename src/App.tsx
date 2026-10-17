@@ -322,7 +322,8 @@ export function App() {
     }
     setIsLoading(true);
     setErrorMsg(null);
-    setStatusMsg(null);
+    setStatusMsg('AI 正在構思文案與排版中，請保持此畫面開啟…');
+
     try {
       const result = await generateCarouselContent(
         apiKey,
@@ -334,14 +335,17 @@ export function App() {
       );
       setContent(result);
       setActiveSlide(0);
+      setStatusMsg(null);
       setMobileTab('preview'); // 手機端產生完成後自動切換至預覽分頁
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setErrorMsg(err instanceof Error ? err.message : '生成失敗，請檢查 API Key 或網路連線');
+      setStatusMsg(null);
+      setErrorMsg(err instanceof Error ? err.message : '生成失敗，請檢查網路連線或稍後重試。');
     } finally {
       setIsLoading(false);
     }
   };
+
 
   const handleTestKey = async () => {
     setErrorMsg(null);

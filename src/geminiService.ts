@@ -148,43 +148,60 @@ export async function generateCarouselContent(
 }
 `;
 
-  // 優先嘗試使用 Vercel 後端安全代理端點 /api/generate
+  // 1. 優先嘗試使用 Vercel 後端安全代理端點 /api/generate
   // 這樣前端完全不需要持有 API Key，且跨裝置通用！
+  const trimmedKey = apiKey.trim();
+  const isDirectApiKey = trimmedKey.startsWith('AIzaSy'); // 只有真正的 Google API Key 是 AIzaSy 開頭
+
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 55000); // 55秒前端超時防護
+
     const proxyRes = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         prompt,
-        accessCode: apiKey.trim(), // 可以當作自訂通行密碼
+        accessCode: trimmedKey, // 可以當作自訂通行密碼
       }),
     });
+    clearTimeout(timeoutId);
 
     if (proxyRes.ok) {
       const parsed = (await proxyRes.json()) as GeneratedContent;
       return parsed;
-    } else if (proxyRes.status !== 404 && proxyRes.status !== 500) {
-      // 若後端有回應（如密碼錯誤 401 或參數錯誤），直接回報訊息
-      const errData = await proxyRes.json().catch(() => ({}));
-      if (errData.error && !errData.error.includes('GEMINI_API_KEY')) {
-        throw new Error(errData.error);
-      }
+    }
+
+    // 若後端回傳 401 (通行密碼錯誤) 或其他明確業務錯誤
+    const errData = await proxyRes.json().catch(() => ({}));
+    if (errData.error) {
+      throw new Error(errData.error);
+    }
+
+    // 如果後端是 504 Gateway Timeout 或 500
+    if (proxyRes.status === 504 || proxyRes.status === 502) {
+      throw new Error('AI 運算超時（伺服器回應較慢），請在 iPhone 保持畫面開啟不要切換 App，並再試一次！');
     }
   } catch (err: any) {
-    // 若不是 404 / 服務未佈署，而是特定業務錯誤，直接拋出
-    if (err.message && !err.message.includes('fetch')) {
-      throw err;
+    if (err.name === 'AbortError') {
+      throw new Error('請求超時：iPhone 切換至背景可能導致網路被中斷，請保持 App 在前台並重試一次。');
+    }
+    // 如果輸入的不是 Google 官方 Key (例如只是通行密碼 8888)，嚴禁掉入前端直連 Google，避免誤報「API key 驗證錯誤」
+    if (!isDirectApiKey) {
+      throw new Error(
+        err.message || '連線中斷或伺服器忙碌，請確認通行密碼是否正確，並保持 App 在前台重試。'
+      );
     }
   }
 
-  // 若後端未設定環境變數或本地開發環境，則使用前端直接連線（需提供 API Key）
-  if (!apiKey || apiKey.trim() === '') {
-    throw new Error(
-      '請輸入 Google Gemini API Key 或通行密碼。若是透過 Vercel 部署，請確認已在 Vercel 後台設定 GEMINI_API_KEY 環境變數。'
-    );
+  // 2. 只有當使用者「明確輸入了以 AIzaSy 開頭的個人 Google API Key」，才進行純前端直連備援
+  if (!isDirectApiKey) {
+    throw new Error('請輸入通行密碼，或貼上正確的 Google Gemini API Key (以 AIzaSy 開頭)。');
   }
 
-  const cleanKey = apiKey.trim();
+  const cleanKey = trimmedKey;
+
 
   // 嘗試向 Google 查詢該 API Key 實際擁有的模型清單
   let availableModels: string[] = [];
