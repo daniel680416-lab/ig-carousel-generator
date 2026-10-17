@@ -179,13 +179,13 @@ export async function generateCarouselContent(
       throw new Error(errData.error);
     }
 
-    // 如果後端是 504 Gateway Timeout 或 500
+    // 如果後端是 504 Gateway Timeout 或 502
     if (proxyRes.status === 504 || proxyRes.status === 502) {
-      throw new Error('AI 運算超時（伺服器回應較慢），請在 iPhone 保持畫面開啟不要切換 App，並再試一次！');
+      throw new Error('AI 伺服器回應較慢，請保持畫面開啟並再試一次！');
     }
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error('請求超時：iPhone 切換至背景可能導致網路被中斷，請保持 App 在前台並重試一次。');
+      throw new Error('請求超時：AI 伺服器運算較慢或網路連線中斷。若在 iPhone 上使用，請保持螢幕開啟並重試。');
     }
     // 如果輸入的不是 Google 官方 Key (例如只是通行密碼 8888)，嚴禁掉入前端直連 Google，避免誤報「API key 驗證錯誤」
     if (!isDirectApiKey) {
@@ -226,13 +226,13 @@ export async function generateCarouselContent(
     throw new Error('此 API Key 找不到任何支援 generateContent 的模型，請確認是否為 Google AI Studio 產生的金鑰。');
   }
 
-  // 依序嘗試的模型清單（移除已失效的 gemini-2.5-pro，加入最新可用模型）
+  // 依序嘗試的模型清單（優先使用速度最快的 Flash 模型）
   const candidateModels = [
-    'gemini-3.8-flash',
-    'gemini-3.1-pro-preview',
     'gemini-2.0-flash',
-    'gemma-4-26b-a4b-it',
-  ].filter((m) => availableModels.includes(m) || m === 'gemini-3.8-flash');
+    'gemini-1.5-flash',
+    'gemini-2.5-flash',
+    'gemini-1.5-pro',
+  ].filter((m) => availableModels.includes(m));
 
   const modelsToTry = candidateModels.length > 0 ? candidateModels : availableModels;
 

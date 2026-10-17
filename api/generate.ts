@@ -53,15 +53,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!prompt) {
       res.status(400).json({ error: 'Prompt is required' });
       return;
+    }
+
     const cleanKey = apiKey.trim();
 
-
-    // 優先候選模型（遇到壅塞自動平滑重試）
+    // 官方正式支援的 Gemini 快速模型清單（優先使用速度最快且免費額度充足的 Flash 模型）
     const candidateModels = [
-      'gemini-3.8-flash',
-      'gemini-3.1-pro-preview',
       'gemini-2.0-flash',
-      'gemma-4-26b-a4b-it',
+      'gemini-1.5-flash',
+      'gemini-2.5-flash',
+      'gemini-1.5-pro',
     ];
 
     let lastError: any = null;
@@ -69,9 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const model of candidateModels) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
       try {
+        // 每個模型設定 15 秒超時，避免單一模型卡住拖累整體
+        const modelController = new AbortController();
+        const modelTimeout = setTimeout(() => modelController.abort(), 15000);
+
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: modelController.signal,
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -79,6 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           }),
         });
+        clearTimeout(modelTimeout);
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
