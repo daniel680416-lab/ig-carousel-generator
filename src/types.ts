@@ -65,6 +65,10 @@ export interface SlideData {
 }
 
 export interface GeneratedContent {
+  /** AI 自動深度推演出的目標受眾 */
+  analyzedAudience?: string;
+  /** AI 自動深度推演出的亮點與痛點 */
+  analyzedKeyTakeaways?: string;
   slides: [SlideData, SlideData, SlideData, SlideData];
   caption: string;
 }

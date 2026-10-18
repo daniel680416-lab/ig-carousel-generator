@@ -322,7 +322,11 @@ export function App() {
     }
     setIsLoading(true);
     setErrorMsg(null);
-    setStatusMsg('AI 正在構思文案與排版中，請保持此畫面開啟…');
+    setStatusMsg(
+      !audience.trim() || !keyTakeaways.trim()
+        ? 'AI 正在深度分析受眾與痛點，並撰寫高轉化圖文與貼文…'
+        : 'AI 正在構思文案與排版中，請保持此畫面開啟…'
+    );
 
     try {
       const result = await generateCarouselContent(
@@ -334,6 +338,15 @@ export function App() {
         ctaDetail
       );
       setContent(result);
+
+      // 若使用者原本留空，自動將 AI 深度分析推演的受眾與痛點反填至輸入框供檢視
+      if (!audience.trim() && result.analyzedAudience) {
+        setAudience(result.analyzedAudience);
+      }
+      if (!keyTakeaways.trim() && result.analyzedKeyTakeaways) {
+        setKeyTakeaways(result.analyzedKeyTakeaways);
+      }
+
       setActiveSlide(0);
       setStatusMsg(null);
       setMobileTab('preview'); // 手機端產生完成後自動切換至預覽分頁
@@ -598,23 +611,48 @@ export function App() {
             <Step n={2} title="課程資訊與 AI 文案" icon={<Sparkles className="h-4 w-4 text-fuchsia-300" />}>
               <div className="space-y-3">
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-slate-300">
-                    課程主題 <span className="text-rose-400">*</span>
+                  <label className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-300">
+                    <span>
+                      課程主題 <span className="text-rose-400">*</span>
+                    </span>
+                    <span className="text-[11px] font-normal text-fuchsia-300">
+                      ✨ 僅需輸入主題，AI 自動分析受眾與痛點
+                    </span>
                   </label>
-                  <input className={inputCls} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="例如：零基礎空中瑜伽入門" />
+                  <input
+                    className={inputCls}
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    placeholder="例如：零基礎空中瑜伽入門、成人手沖咖啡初階"
+                  />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-slate-300">目標學員</label>
-                  <input className={inputCls} value={audience} onChange={(e) => setAudience(e.target.value)} placeholder="例如：久坐上班族、運動新手" />
+                  <label className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-300">
+                    <span>目標學員</span>
+                    <span className="text-[11px] font-normal text-slate-400">
+                      選填（留空由 AI 智慧推導）
+                    </span>
+                  </label>
+                  <input
+                    className={inputCls}
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                    placeholder="例如：久坐上班族、運動新手（留空由 AI 自動深度分析）"
+                  />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-slate-300">重點亮點 / 痛點（選填）</label>
+                  <label className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-300">
+                    <span>重點亮點 / 痛點</span>
+                    <span className="text-[11px] font-normal text-slate-400">
+                      選填（留空由 AI 智慧分析）
+                    </span>
+                  </label>
                   <textarea
                     rows={2}
                     className={`${inputCls} resize-none`}
                     value={keyTakeaways}
                     onChange={(e) => setKeyTakeaways(e.target.value)}
-                    placeholder="例如：克服懸空恐懼、核心借力不手酸、優雅舒展肩頸"
+                    placeholder="例如：克服懸空恐懼、核心借力不手酸（留空由 AI 自動深度發想）"
                   />
                 </div>
 
@@ -715,7 +753,7 @@ export function App() {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-fuchsia-600/25 transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
                 >
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {isLoading ? 'AI 構思中…' : 'AI 一鍵產生圖文與貼文'}
+                  {isLoading ? 'AI 分析受眾並撰寫中…' : 'AI 一鍵產生圖文與貼文'}
                 </button>
               </div>
             </Step>
