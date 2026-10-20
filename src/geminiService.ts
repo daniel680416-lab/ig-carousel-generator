@@ -81,36 +81,36 @@ export async function generateCarouselContent(
 
   const prompt = `
 你是一位頂級的 Instagram 社群內容總監與視覺文案專家。
-請根據以下課程/主題資訊，先進行目標受眾與痛點亮點的深度分析，接著為 Instagram 設計「4 張 1:1 輪播圖（Carousel）」的精準卡片文案，以及一篇「發在 Instagram 的高轉化爆款發文文案（Caption）」。
+請根據以下課程/主題資訊，快速完成受眾與痛點設定，並為 Instagram 設計「4 張 1:1 輪播圖（Carousel）」的精準卡片文案與「IG 發文文案（Caption）」。請無需冗長推論，直接輸出最終 JSON 結果。
 
 【課程主題】：${topic}
 
-【第一步：受眾與痛點深度推導分析】：
+【1. 受眾與痛點設定】：
 ${
   !audience?.trim()
-    ? '👉 使用者「未指定目標受眾」：請深入分析此主題最合適的受眾畫像（年齡生活場景、心理門檻、新手身分等），濃縮為 15~25 字填入 "analyzedAudience" 欄位（例如：「久坐上班族、運動新手、想改善體態但怕受傷的初學者」）。'
-    : `👉 使用者指定目標受眾為：「${audience.trim()}」，請填入 "analyzedAudience" 欄位。`
+    ? '- 目標受眾（未指定）：請直接設定最適合此主題的受眾畫像（15~25字），填入 "analyzedAudience"（例：「久坐上班族、運動新手、想改善體態的初學者」）。'
+    : `- 目標受眾：「${audience.trim()}」，請填入 "analyzedAudience"。`
 }
 ${
   !keyTakeaways?.trim()
-    ? '👉 使用者「未指定重點痛點」：請精準挖掘該主題學員最常踩的 3 大盲點與最具吸引力的突破核心解法，濃縮為 20~35 字填入 "analyzedKeyTakeaways" 欄位（例如：「克服懸空恐懼、核心借力不手酸、優雅舒展肩頸」）。'
-    : `👉 使用者指定重點亮點/痛點為：「${keyTakeaways.trim()}」，請填入 "analyzedKeyTakeaways" 欄位。`
+    ? '- 重點痛點（未指定）：請直接列出該主題學員最常見的 3 大盲點與突破解法（20~35字），填入 "analyzedKeyTakeaways"（例：「克服懸空恐懼、核心借力不手酸、優雅舒展肩頸」）。'
+    : `- 重點痛點：「${keyTakeaways.trim()}」，請填入 "analyzedKeyTakeaways"。`
 }
 
-【第二步：行動呼籲（CTA）目標】：${goal.label}
+【2. 行動呼籲（CTA）目標】：${goal.label}
 - 方向說明：${goal.prompt}
 - 使用者補充細節：${ctaDetail?.trim() || '（未提供，請依主題自行合理設計，不要編造具體價格、日期或名額）'}
 - 第 4 張圖的 ctaButton、footnote，以及貼文結尾的 CTA，都必須圍繞此目標，三者保持一致。
 
-【第三步：極致精簡原則（重要！不可遮擋背景照片）】：
+【3. 極致精簡原則（重要！不可遮擋背景照片）】：
 - 標題（title）：12 字以內短語，可加換行符號 \\n。
 - 副標題（subtitle）：15 字以內短句。
 - 條列要點（bulletPoints）：每點必須極致精簡在 6~12 字以內（短語即可，例如「手臂過度用力代償」、「骨盆未正導致晃動」），嚴禁長篇大論！
 - CTA 按鈕（ctaButton）：12 字以內短語。
 
-【4 張輪播圖結構要求（需完全緊扣上述分析的受眾與痛點）】：
+【4 張輪播圖結構要求（需緊扣上述受眾與痛點）】：
 - Slide 1 (封面 Hook)：爆款吸睛大標題（10~14字）、好奇副標、亮點標籤。
-- Slide 2 (痛點共鳴)：直接點出上述推演出學員常犯的 3 個盲點/困擾，條列 3 點極短 bulletPoints。
+- Slide 2 (痛點共鳴)：直接點出學員常犯的 3 個盲點/困擾，條列 3 點極短 bulletPoints。
 - Slide 3 (核心解法)：介紹 3 大關鍵技巧/價值突破，條列 3 點極短 bulletPoints。
 - Slide 4 (行動呼籲 CTA)：依上述 CTA 目標，提供極簡 ctaButton 文字。
 
@@ -166,7 +166,7 @@ ${
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000); // 55秒前端超時防護
+    const timeoutId = setTimeout(() => controller.abort(), 65000); // 65秒前端超時防護（大於後端48秒熔斷，確保能收到後端明確錯誤訊息）
 
     const proxyRes = await fetch('/api/generate', {
       method: 'POST',
