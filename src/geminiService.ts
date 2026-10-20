@@ -263,14 +263,17 @@ ${
   for (const model of modelsToTry) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
     try {
+      const generationConfig: Record<string, any> = { temperature: 0.7 };
+      if (!model.startsWith('gemma')) {
+        generationConfig.responseMimeType = 'application/json';
+      }
+
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-          },
+          generationConfig,
         }),
       });
 
@@ -292,8 +295,14 @@ ${
         const parsed = JSON.parse(text) as GeneratedContent;
         return parsed;
       } catch {
-        const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(cleaned) as GeneratedContent;
+        const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const firstBrace = cleaned.indexOf('{');
+        const lastBrace = cleaned.lastIndexOf('}');
+        const jsonSlice =
+          firstBrace !== -1 && lastBrace !== -1
+            ? cleaned.slice(firstBrace, lastBrace + 1)
+            : cleaned;
+        return JSON.parse(jsonSlice) as GeneratedContent;
       }
     } catch (err: any) {
       lastError = err;

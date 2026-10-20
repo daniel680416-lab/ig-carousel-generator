@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 處理 CORS（允許跨網域存取與 Preflight 請求）
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -43,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const cleanKey = apiKey.trim();
 
-    // 僅在點擊「測試」按鈕時才查詢模型清單，避免每次生成都多花一次網路請求時間
+    // 僅在點擊「測試」按鈕時才查詢模型清單
     if (action === 'test') {
       try {
         const listRes = await fetch(
@@ -82,28 +84,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // 僅使用反應快速的 Flash 模型，避免因切換至慢速 Pro 模型而觸發 Vercel 超時
-    const candidateModels = ['gemini-3.8-flash', 'gemini-3.5-flash'];
+    // 定義重試與備援順序：
+    // 1. gemini-3.8-flash (主力極速模型)
+    // 2. 若遇 503 High Demand 尖峰壅塞，等待 1.2 秒後自動重試一次 gemini-3.8-flash
+    // 3. 自動切換備援模型：gemini-3.1-pro-preview ➔ gemma-4-26b-a4b-it
+    const attempts = [
+      { model: 'gemini-3.8-flash', delayMs: 0, jsonMode: true },
+      { model: 'gemini-3.8-flash', delayMs: 1200, jsonMode: true },
+      { model: 'gemini-3.1-pro-preview', delayMs: 0, jsonMode: true },
+      { model: 'gemma-4-26b-a4b-it', delayMs: 0, jsonMode: false },
+    ];
 
+    const startTime = Date.now();
+    const TOTAL_BUDGET_MS = 52000; // 控制總時間在 52 秒內（小於 Vercel 60s 與前端 65s）
     let lastError: any = null;
 
-    for (const model of candidateModels) {
+    for (const attempt of attempts) {
+      const elapsed = Date.now() - startTime;
+      const remainingMs = TOTAL_BUDGET_MS - elapsed;
+      if (remainingMs < 6000) {
+        break; // 剩餘時間不足時不再發起新請求，直接回報最後錯誤
+      }
+
+      if (attempt.delayMs > 0) {
+        await sleep(attempt.delayMs);
+      }
+
+      const { model, jsonMode } = attempt;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
       const modelController = new AbortController();
-      // 給予單一模型充足的 48 秒生成時間，避免在 25 秒時被提早切斷並重試導致總時間超過 55 秒
-      const modelTimeout = setTimeout(() => modelController.abort(), 48000);
+      // 單次請求最多等待 32 秒（且不超過總剩餘時間）
+      const perAttemptTimeout = Math.min(32000, remainingMs - 500);
+      const modelTimeout = setTimeout(() => modelController.abort(), perAttemptTimeout);
 
       try {
+        const generationConfig: Record<string, any> = {
+          temperature: 0.7,
+        };
+        if (jsonMode) {
+          generationConfig.responseMimeType = 'application/json';
+        }
+
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: modelController.signal,
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0.7,
-            },
+            generationConfig,
           }),
         });
         clearTimeout(modelTimeout);
@@ -112,17 +140,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const errData = await response.json().catch(() => ({}));
           const errMsg = errData.error?.message || `HTTP ${response.status}`;
           lastError = new Error(`[${model}] ${errMsg}`);
-          // 若為 404 (模型不存在) 才嘗試下一個候選模型；若是其他錯誤則直接跳出回報
-          if (response.status === 404) {
-            continue;
+
+          // 若是金鑰無效 (400 API key not valid / 403)，無須重試其他模型，直接跳出
+          if (
+            response.status === 403 ||
+            (response.status === 400 && errMsg.toLowerCase().includes('api key'))
+          ) {
+            break;
           }
-          break;
+          // 若是 503 (High demand 尖峰壅塞)、429 (頻率限制)、404 (模型未開通) 或 500，繼續自動嘗試下一個備援！
+          continue;
         }
 
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) {
-          lastError = new Error(`[${model}] 未回傳內容`);
+          lastError = new Error(`[${model}] 未回傳內容，嘗試下一個備援模型...`);
           continue;
         }
 
@@ -130,8 +163,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         try {
           parsed = JSON.parse(text);
         } catch {
-          const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-          parsed = JSON.parse(cleaned);
+          // 清理可能包裹的 Markdown ```json 標籤或前後雜訊
+          const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+          const firstBrace = cleaned.indexOf('{');
+          const lastBrace = cleaned.lastIndexOf('}');
+          const jsonSlice =
+            firstBrace !== -1 && lastBrace !== -1
+              ? cleaned.slice(firstBrace, lastBrace + 1)
+              : cleaned;
+          parsed = JSON.parse(jsonSlice);
         }
 
         // 成功取得結果並回傳給前端
@@ -140,17 +180,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (err: any) {
         clearTimeout(modelTimeout);
         if (err.name === 'AbortError') {
-          lastError = new Error(`[${model}] AI 運算超過 48 秒未回應，請再試一次。`);
-          // 已經耗時 48 秒，不可再進入下一個迴圈，否則必超過 Vercel 60 秒限制
-          break;
+          lastError = new Error(`[${model}] 單次請求超時，正嘗試備援通道...`);
+          continue;
         }
         lastError = err;
-        break;
+        continue;
       }
     }
 
     res.status(502).json({
-      error: lastError?.message || 'AI 伺服器忙碌中，請稍候重試。',
+      error:
+        lastError?.message ||
+        'Google AI 伺服器目前處於流量尖峰（High Demand），請稍候幾秒再重試一次。',
     });
   } catch (error: any) {
     console.error('API Error:', error);
