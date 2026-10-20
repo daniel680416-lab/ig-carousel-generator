@@ -75,7 +75,8 @@ export async function generateCarouselContent(
   audience?: string,
   keyTakeaways?: string,
   ctaGoal: CtaGoal = 'keyword',
-  ctaDetail?: string
+  ctaDetail?: string,
+  onStatus?: (msg: string) => void
 ): Promise<GeneratedContent> {
   const goal = CTA_GOALS.find((g) => g.id === ctaGoal) ?? CTA_GOALS[0];
 
@@ -160,55 +161,86 @@ ${
 `;
 
   // 1. 優先嘗試使用 Vercel 後端安全代理端點 /api/generate
-  // 這樣前端完全不需要持有 API Key，且跨裝置通用！
+  // 由前端分次發起獨立請求，讓每個備援模型都享有完整的 48 秒伺服器執行時間，並即時更新進度文字！
   const trimmedKey = apiKey.trim();
   const isDirectApiKey = trimmedKey.startsWith('AIzaSy'); // 只有真正的 Google API Key 是 AIzaSy 開頭
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 65000); // 65秒前端超時防護（大於後端48秒熔斷，確保能收到後端明確錯誤訊息）
+  const proxyAttempts = [
+    {
+      model: 'gemini-3.8-flash',
+      statusText: '✨ AI 正在分析受眾並撰寫文案中 (主力通道 gemini-3.8-flash)…',
+    },
+    {
+      model: 'gemma-4-26b-a4b-it',
+      statusText: '🔄 主力模型處於流量尖峰，已自動切換至高速備援通道 (gemma-4-26b-a4b-it)，請稍候…',
+    },
+    {
+      model: 'gemini-3.8-flash',
+      statusText: '⏳ 正在進行最終重試 (gemini-3.8-flash)，請保持畫面開啟…',
+    },
+  ];
 
-    const proxyRes = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        prompt,
-        accessCode: trimmedKey, // 可以當作自訂通行密碼
-      }),
-    });
-    clearTimeout(timeoutId);
+  let lastProxyError = '';
 
-    if (proxyRes.ok) {
-      const parsed = (await proxyRes.json()) as GeneratedContent;
-      return parsed;
-    }
+  for (let i = 0; i < proxyAttempts.length; i++) {
+    const attempt = proxyAttempts[i];
+    onStatus?.(attempt.statusText);
 
-    // 若後端回傳 401 (通行密碼錯誤) 或其他明確業務錯誤
-    const errData = await proxyRes.json().catch(() => ({}));
-    if (errData.error) {
-      throw new Error(errData.error);
-    }
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 52000);
 
-    // 如果後端是 504 Gateway Timeout 或 502
-    if (proxyRes.status === 504 || proxyRes.status === 502) {
-      throw new Error('AI 伺服器回應較慢，請保持畫面開啟並再試一次！');
-    }
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      throw new Error('請求超時：AI 伺服器運算較慢或網路連線中斷。若在 iPhone 上使用，請保持螢幕開啟並重試。');
-    }
-    // 如果輸入的不是 Google 官方 Key (例如只是通行密碼 8888)，嚴禁掉入前端直連 Google，避免誤報「API key 驗證錯誤」
-    if (!isDirectApiKey) {
-      throw new Error(
-        err.message || '連線中斷或伺服器忙碌，請確認通行密碼是否正確，並保持 App 在前台重試。'
-      );
+      const proxyRes = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          prompt,
+          accessCode: trimmedKey,
+          model: attempt.model,
+        }),
+      });
+      clearTimeout(timeoutId);
+
+      if (proxyRes.ok) {
+        const parsed = (await proxyRes.json()) as GeneratedContent;
+        return parsed;
+      }
+
+      const errData = await proxyRes.json().catch(() => ({}));
+      const errMsg = errData.error || `HTTP ${proxyRes.status}`;
+      lastProxyError = errMsg;
+
+      // 若是通行密碼錯誤 (401) 或伺服器未設定環境變數 (fatal)，立即停止重試並回報
+      if (proxyRes.status === 401 || errData.fatal) {
+        throw new Error(errMsg);
+      }
+
+      // 若是本地開發環境 (404 找不到 /api/generate) 且使用者有輸入 AIzaSy 金鑰，跳出進入前端直連
+      if (proxyRes.status === 404 && isDirectApiKey) {
+        break;
+      }
+      // 否則（例如 503 High Demand、504 超時），自動進入迴圈下一棒備援模型！
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        lastProxyError = `[${attempt.model}] 伺服器回應超時`;
+        continue;
+      }
+      // 若為明確致命錯誤（如通行密碼錯誤），直接向外拋出停止
+      if (err.message?.includes('通行密碼') || err.message?.includes('環境變數')) {
+        throw err;
+      }
+      lastProxyError = err.message || '連線異常';
+      if (isDirectApiKey) {
+        break;
+      }
     }
   }
 
-  // 2. 只有當使用者「明確輸入了以 AIzaSy 開頭的個人 Google API Key」，才進行純前端直連備援
   if (!isDirectApiKey) {
-    throw new Error('請輸入通行密碼，或貼上正確的 Google Gemini API Key (以 AIzaSy 開頭)。');
+    throw new Error(
+      `生成未完成（${lastProxyError || 'Google AI 伺服器目前處於流量尖峰'}）。目前已停止等待，請點擊下方按鈕再試一次！`
+    );
   }
 
   const cleanKey = trimmedKey;

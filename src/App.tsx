@@ -335,7 +335,8 @@ export function App() {
         audience,
         keyTakeaways,
         ctaGoal,
-        ctaDetail
+        ctaDetail,
+        (msg) => setStatusMsg(msg)
       );
       setContent(result);
 
