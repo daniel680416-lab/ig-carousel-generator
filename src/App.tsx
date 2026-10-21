@@ -55,6 +55,8 @@ const LAYOUT_OPTIONS: { id: LayoutMode; label: string; desc: string }[] = [
   { id: 'corner-tag', label: '左下角落', desc: '極簡不擋主體' },
   { id: 'compact-card', label: '下浮毛玻璃卡', desc: '低高度卡片' },
   { id: 'center-card', label: '置中毛玻璃卡', desc: '資訊量較大' },
+  { id: 'magazine-split', label: '雜誌上下分欄', desc: '中央留空留主體' },
+  { id: 'poster-frame', label: '精品置中海報', desc: '雙框線對稱排版' },
 ];
 
 const BRAND_STORAGE_KEY = 'ig_brand_info';
@@ -105,6 +107,27 @@ function LayoutThumb({ mode }: { mode: LayoutMode }) {
           <span className="h-[4px] w-3/5 rounded bg-white/90" />
           <span className="h-[3px] w-4/5 rounded bg-white/55" />
           <span className="h-[3px] w-2/3 rounded bg-white/55" />
+        </div>
+      )}
+      {mode === 'magazine-split' && (
+        <div className="absolute inset-0 flex flex-col justify-between p-[6px]">
+          <div className="flex flex-col gap-[3px] rounded-t bg-black/60 p-[4px]">
+            <span className="h-[4px] w-2/3 rounded bg-white/90" />
+            <span className="h-[3px] w-1/2 rounded bg-white/50" />
+          </div>
+          <div className="flex flex-col gap-[2px] rounded-b bg-black/70 p-[4px]">
+            <span className="h-[3px] w-full rounded bg-white/70" />
+            <span className="h-[3px] w-4/5 rounded bg-white/70" />
+          </div>
+        </div>
+      )}
+      {mode === 'poster-frame' && (
+        <div className="absolute inset-[4px] rounded border border-white/50 p-[4px]">
+          <div className="absolute inset-x-[6px] bottom-[6px] flex flex-col items-center justify-center gap-[2px] rounded border border-white/30 bg-white/20 py-[4px]">
+            <span className="h-[4px] w-1/2 rounded bg-white/90" />
+            <span className="h-[2px] w-1/4 rounded bg-sky-300" />
+            <span className="h-[3px] w-2/3 rounded bg-white/60" />
+          </div>
         </div>
       )}
     </div>
@@ -770,7 +793,7 @@ export function App() {
                     <Layers className="h-3.5 w-3.5 text-sky-300" />
                     排版（皆不遮擋主體）
                   </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {LAYOUT_OPTIONS.map((l) => (
                       <button
                         key={l.id}
@@ -823,7 +846,7 @@ export function App() {
                     <Palette className="h-3.5 w-3.5 text-sky-300" />
                     配色
                   </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {(Object.keys(THEME_CONFIGS) as CardTheme[]).map((k) => {
                       const t = THEME_CONFIGS[k];
                       return (

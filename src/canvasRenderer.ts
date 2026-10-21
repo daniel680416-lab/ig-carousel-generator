@@ -653,6 +653,372 @@ async function drawBrand(ctx: CanvasRenderingContext2D, brand: BrandInfo, fontSt
 }
 
 /* ============================================================
+   版型 5：雜誌上下分欄 (Magazine Split)
+   頂部大字報頭 + 底部膠囊橫條，完全釋放中央人像與動作主體！
+============================================================ */
+function drawMagazineSplit(
+  ctx: CanvasRenderingContext2D,
+  slide: SlideData,
+  fontStyle: FontStyle,
+  p: Palette,
+  hasBrand: boolean
+) {
+  const f = FONT_STYLES[fontStyle];
+  const marginX = 64;
+  const contentW = SIZE - marginX * 2;
+
+  // 1. 頂部深色漸層（確保標題在任何高光背景下皆清晰無比）
+  const topGrad = ctx.createLinearGradient(0, 0, 0, 380);
+  topGrad.addColorStop(0, 'rgba(8,12,24,0.88)');
+  topGrad.addColorStop(0.55, 'rgba(8,12,24,0.5)');
+  topGrad.addColorStop(1, 'rgba(8,12,24,0)');
+  ctx.fillStyle = topGrad;
+  ctx.fillRect(0, 0, SIZE, 380);
+
+  // 2. 頂部文字排版（若有品牌標籤則稍微下移避免重疊）
+  let topY = hasBrand ? 128 : 64;
+
+  if (slide.tag) {
+    const th = 38;
+    ctx.font = fontString(700, 20, f.body);
+    const tw = ctx.measureText(slide.tag).width + 28;
+    ctx.beginPath();
+    ctx.roundRect(marginX, topY, tw, th, th / 2);
+    ctx.fillStyle = p.tagBg;
+    ctx.fill();
+    ctx.fillStyle = p.tagText;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(slide.tag, marginX + 14, topY + th / 2 + 1);
+    topY += th + 18;
+  }
+
+  // 大標題
+  const fitTitle = fitText(
+    ctx,
+    slide.title,
+    contentW,
+    2,
+    58,
+    40,
+    (size) => fontString(f.headingWeight, size, f.heading)
+  );
+  const titleLh = fitTitle.size * 1.25;
+  ctx.font = fontString(f.headingWeight, fitTitle.size, f.heading);
+  ctx.textBaseline = 'alphabetic';
+  for (const line of fitTitle.lines) {
+    ctx.fillStyle = p.title;
+    if (f.headingStroke > 0) {
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = f.headingStroke;
+      ctx.strokeStyle = p.title;
+      ctx.strokeText(line, marginX, topY + fitTitle.size);
+    }
+    ctx.fillText(line, marginX, topY + fitTitle.size);
+    topY += titleLh;
+  }
+
+  // 3. 底部深色漸層（為底部要點/CTA打底）
+  const bottomGrad = ctx.createLinearGradient(0, 560, 0, SIZE);
+  bottomGrad.addColorStop(0, 'rgba(8,12,24,0)');
+  bottomGrad.addColorStop(0.35, 'rgba(8,12,24,0.68)');
+  bottomGrad.addColorStop(1, 'rgba(8,12,24,0.92)');
+  ctx.fillStyle = bottomGrad;
+  ctx.fillRect(0, 560, SIZE, SIZE - 560);
+
+  const hasBullets = !!slide.bulletPoints && slide.bulletPoints.length > 0;
+
+  if (hasBullets) {
+    // 每個要點排成「獨立毛玻璃膠囊橫條 (Pill Bar)」
+    const bullets = slide.bulletPoints!.slice(0, 3);
+    const cardH = 62;
+    const gap = 14;
+    const totalH = bullets.length * cardH + (bullets.length - 1) * gap;
+    const startY = SIZE - 68 - totalH;
+
+    bullets.forEach((point, i) => {
+      const by = startY + i * (cardH + gap);
+
+      // 膠囊卡片底色與邊框
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(marginX, by, contentW, cardH, 20);
+      ctx.fillStyle = p.cardFill !== 'transparent' ? p.cardFill : 'rgba(12,18,34,0.65)';
+      ctx.fill();
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = p.cardStroke !== 'transparent' ? p.cardStroke : 'rgba(255,255,255,0.25)';
+      ctx.stroke();
+      ctx.restore();
+
+      // 序號標記：01 │, 02 │, 03 │
+      const numStr = `0${i + 1}`;
+      ctx.font = fontString(900, 23, f.body);
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = p.accent;
+      ctx.fillText(numStr, marginX + 20, by + cardH / 2 + 1);
+
+      // 垂直細分隔線
+      ctx.fillStyle = 'rgba(255,255,255,0.24)';
+      ctx.fillRect(marginX + 62, by + 16, 1.5, cardH - 32);
+
+      // 要點文字
+      ctx.font = fontString(700, 24, f.body);
+      ctx.fillStyle = p.bullet;
+      const textFit = fitText(
+        ctx,
+        point,
+        contentW - 90,
+        1,
+        24,
+        20,
+        (s) => fontString(700, s, f.body)
+      );
+      ctx.fillText(textFit.lines[0] || point, marginX + 78, by + cardH / 2 + 1);
+    });
+  } else {
+    // 無要點頁面（封面或 CTA 頁）：副標題 + 按鈕 / 註腳
+    let bottomY = SIZE - 180;
+    if (slide.subtitle) {
+      const subFit = fitText(
+        ctx,
+        slide.subtitle,
+        contentW,
+        2,
+        28,
+        22,
+        (s) => fontString(f.bodyWeight, s, f.body)
+      );
+      const subLh = subFit.size * 1.4;
+      ctx.font = fontString(f.bodyWeight, subFit.size, f.body);
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = p.sub;
+      for (const line of subFit.lines) {
+        ctx.fillText(line, marginX, bottomY);
+        bottomY += subLh;
+      }
+    }
+
+    if (slide.ctaButton) {
+      const bh = 70;
+      ctx.beginPath();
+      ctx.roundRect(marginX, SIZE - 114, contentW, bh, bh / 2);
+      ctx.fillStyle = p.accent;
+      ctx.fill();
+      ctx.font = fontString(700, 28, f.body);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = p.accentText;
+      ctx.fillText(slide.ctaButton, marginX + contentW / 2, SIZE - 114 + bh / 2 + 1);
+      ctx.textAlign = 'left';
+    } else if (slide.footnote) {
+      ctx.font = fontString(500, 22, f.body);
+      ctx.fillStyle = p.muted;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(slide.footnote.replace(/👉/g, '→'), marginX, SIZE - 68);
+    }
+  }
+}
+
+/* ============================================================
+   版型 6：精品置中海報 (Poster Frame)
+   內縮雙框線海報畫框 + 全置中對稱排版 + ✦ 星芒宣言條列
+============================================================ */
+function drawPosterFrame(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  slide: SlideData,
+  fontStyle: FontStyle,
+  p: Palette,
+  focus: CropFocus
+) {
+  const f = FONT_STYLES[fontStyle];
+  const frameInset = 36;
+  const frameW = SIZE - frameInset * 2;
+  const frameH = SIZE - frameInset * 2;
+
+  // 1. 海報細外框
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = p.cardStroke !== 'transparent' ? p.cardStroke : 'rgba(255,255,255,0.32)';
+  ctx.strokeRect(frameInset, frameInset, frameW, frameH);
+
+  // 四個角落強調標記 (Corner Accent Ticks)
+  const tick = 14;
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = p.accent;
+  ctx.beginPath();
+  // 左上
+  ctx.moveTo(frameInset - 2, frameInset + tick);
+  ctx.lineTo(frameInset - 2, frameInset - 2);
+  ctx.lineTo(frameInset + tick, frameInset - 2);
+  // 右上
+  ctx.moveTo(frameInset + frameW + 2 - tick, frameInset - 2);
+  ctx.lineTo(frameInset + frameW + 2, frameInset - 2);
+  ctx.lineTo(frameInset + frameW + 2, frameInset + tick);
+  // 右下
+  ctx.moveTo(frameInset + frameW + 2, frameInset + frameH + 2 - tick);
+  ctx.lineTo(frameInset + frameW + 2, frameInset + frameH + 2);
+  ctx.lineTo(frameInset + frameW + 2 - tick, frameInset + frameH + 2);
+  // 左下
+  ctx.moveTo(frameInset + tick, frameInset + frameH + 2);
+  ctx.lineTo(frameInset - 2, frameInset + frameH + 2);
+  ctx.lineTo(frameInset - 2, frameInset + frameH + 2 - tick);
+  ctx.stroke();
+  ctx.restore();
+
+  // 2. 底部中心半透明毛玻璃卡片（置中對稱）
+  const cardW = SIZE - 120;
+  const cardX = 60;
+  const pad = 44;
+  const innerW = cardW - pad * 2;
+
+  // 量測置中內容高度
+  const hasBullets = !!slide.bulletPoints && slide.bulletPoints.length > 0;
+  const fitTitle = fitText(
+    ctx,
+    slide.title,
+    innerW,
+    2,
+    54,
+    38,
+    (s) => fontString(f.headingWeight, s, f.heading)
+  );
+  const titleLh = fitTitle.size * 1.25;
+
+  let contentH = fitTitle.lines.length * titleLh + 24; // 標題 + 分隔線
+  if (slide.tag) contentH += 48;
+  if (slide.subtitle) {
+    const subFit = fitText(
+      ctx,
+      slide.subtitle,
+      innerW,
+      2,
+      26,
+      20,
+      (s) => fontString(f.bodyWeight, s, f.body)
+    );
+    contentH += subFit.lines.length * (subFit.size * 1.4) + 14;
+  }
+  if (hasBullets) {
+    contentH += slide.bulletPoints!.slice(0, 3).length * 48 + 12;
+  }
+  if (slide.ctaButton) contentH += 74;
+  else if (slide.footnote) contentH += 36;
+
+  const cardH = contentH + pad * 2;
+  const cardY = SIZE - 56 - cardH;
+
+  // 繪製毛玻璃卡片
+  drawFrostedCard(ctx, img, focus, cardX, cardY, cardW, cardH, 32, p);
+
+  // 3. 繪製全置中文字
+  let curY = cardY + pad;
+  const centerX = SIZE / 2;
+  ctx.textAlign = 'center';
+
+  // 標籤
+  if (slide.tag) {
+    const th = 36;
+    ctx.font = fontString(700, 20, f.body);
+    const tw = ctx.measureText(slide.tag).width + 28;
+    ctx.beginPath();
+    ctx.roundRect(centerX - tw / 2, curY, tw, th, th / 2);
+    ctx.fillStyle = p.tagBg;
+    ctx.fill();
+    ctx.fillStyle = p.tagText;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(slide.tag, centerX, curY + th / 2 + 1);
+    curY += th + 16;
+  }
+
+  // 大標題
+  ctx.font = fontString(f.headingWeight, fitTitle.size, f.heading);
+  ctx.textBaseline = 'alphabetic';
+  for (const line of fitTitle.lines) {
+    ctx.fillStyle = p.title;
+    if (f.headingStroke > 0) {
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = f.headingStroke;
+      ctx.strokeStyle = p.title;
+      ctx.strokeText(line, centerX, curY + fitTitle.size);
+    }
+    ctx.fillText(line, centerX, curY + fitTitle.size);
+    curY += titleLh;
+  }
+
+  // 分隔短橫線
+  curY += 8;
+  ctx.beginPath();
+  ctx.roundRect(centerX - 24, curY, 48, 3, 1.5);
+  ctx.fillStyle = p.accent;
+  ctx.fill();
+  curY += 18;
+
+  // 副標題
+  if (slide.subtitle) {
+    const subFit = fitText(
+      ctx,
+      slide.subtitle,
+      innerW,
+      2,
+      26,
+      20,
+      (s) => fontString(f.bodyWeight, s, f.body)
+    );
+    const subLh = subFit.size * 1.4;
+    ctx.font = fontString(f.bodyWeight, subFit.size, f.body);
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = p.sub;
+    for (const line of subFit.lines) {
+      ctx.fillText(line, centerX, curY + subFit.size / 2);
+      curY += subLh;
+    }
+    curY += 14;
+  }
+
+  // 條列要點：✦ 星芒置中標籤
+  if (hasBullets) {
+    slide.bulletPoints!.slice(0, 3).forEach((point) => {
+      const bh = 42;
+      const fitPoint = fitText(
+        ctx,
+        point,
+        innerW - 60,
+        1,
+        24,
+        19,
+        (s) => fontString(700, s, f.body)
+      );
+      const fullText = `✦  ${fitPoint.lines[0] || point}`;
+      ctx.font = fontString(700, fitPoint.size, f.body);
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = p.bullet;
+      ctx.fillText(fullText, centerX, curY + bh / 2);
+      curY += bh + 6;
+    });
+  }
+
+  // CTA 按鈕
+  if (slide.ctaButton) {
+    const bh = 64;
+    const btnW = Math.min(520, innerW);
+    ctx.beginPath();
+    ctx.roundRect(centerX - btnW / 2, curY + 6, btnW, bh, bh / 2);
+    ctx.fillStyle = p.accent;
+    ctx.fill();
+    ctx.font = fontString(700, 26, f.body);
+    ctx.fillStyle = p.accentText;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(slide.ctaButton, centerX, curY + 6 + bh / 2 + 1);
+  } else if (slide.footnote) {
+    ctx.font = fontString(500, 21, f.body);
+    ctx.fillStyle = p.muted;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(slide.footnote.replace(/👉/g, '→'), centerX, curY + 14);
+  }
+
+  ctx.textAlign = 'left';
+}
+
+/* ============================================================
    主渲染函式（回傳前所有 await 已完成，繪製過程為同步，不會互相干擾）
 ============================================================ */
 
@@ -700,7 +1066,11 @@ export async function renderSlideToCanvas(
 
   const theme = THEME_CONFIGS[options.theme] ?? THEME_CONFIGS['dark-glass'];
   const layout = options.layout;
-  const isCard = layout === 'compact-card' || layout === 'center-card';
+  const isCard =
+    layout === 'compact-card' ||
+    layout === 'center-card' ||
+    layout === 'poster-frame' ||
+    layout === 'magazine-split';
   const palette = isCard ? theme.card : theme.photo;
 
   // 1. 底圖（1:1 裁切）
@@ -708,6 +1078,8 @@ export async function renderSlideToCanvas(
 
   // 2. 依版型排版
   const marginX = 72;
+  const hasBrand = !!(brand && (brand.name.trim() || brand.handle.trim() || brand.logo));
+
   if (layout === 'bottom-banner') {
     const style: ContentStyle = {
       fontStyle,
@@ -766,8 +1138,7 @@ export async function renderSlideToCanvas(
     const cardY = SIZE - 48 - cardH;
     drawFrostedCard(ctx, img, focus, cardX, cardY, cardW, cardH, 40, palette);
     drawContent(ctx, slide, cardX + pad, cardY + pad - 4, innerW, style, true);
-  } else {
-    // center-card
+  } else if (layout === 'center-card') {
     const style: ContentStyle = {
       fontStyle,
       palette,
@@ -783,6 +1154,10 @@ export async function renderSlideToCanvas(
     const cardY = options.pageIndex === 0 ? SIZE - cardH - 96 : (SIZE - cardH) / 2 + 24;
     drawFrostedCard(ctx, img, focus, cardX, cardY, cardW, cardH, 44, palette);
     drawContent(ctx, slide, cardX + pad, cardY + pad - 4, innerW, style, true);
+  } else if (layout === 'magazine-split') {
+    drawMagazineSplit(ctx, slide, fontStyle, palette, hasBrand);
+  } else if (layout === 'poster-frame') {
+    drawPosterFrame(ctx, img, slide, fontStyle, palette, focus);
   }
 
   // 3. 品牌（若有設定才繪製）

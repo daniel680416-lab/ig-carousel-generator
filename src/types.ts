@@ -1,5 +1,11 @@
 export type CardTheme = 'light-glass' | 'dark-glass' | 'amber-warm' | 'cyber-neon';
-export type LayoutMode = 'bottom-banner' | 'compact-card' | 'center-card' | 'corner-tag';
+export type LayoutMode =
+  | 'bottom-banner'
+  | 'compact-card'
+  | 'center-card'
+  | 'corner-tag'
+  | 'magazine-split'
+  | 'poster-frame';
 export type FontStyle = 'modern' | 'warm' | 'elegant';
 export type ExportFormat = 'png' | 'jpg';
 export type CtaGoal = 'keyword' | 'signup' | 'save' | 'engage' | 'urgency';
