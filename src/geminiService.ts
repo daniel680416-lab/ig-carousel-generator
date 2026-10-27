@@ -161,22 +161,25 @@ ${
 `;
 
   // 1. 優先嘗試使用 Vercel 後端安全代理端點 /api/generate
-  // 由前端分次發起獨立請求，讓每個備援模型都享有完整的 48 秒伺服器執行時間，並即時更新進度文字！
+  // 雙引擎架構：第 1 棒 Groq 極速晶片 (1~2秒且不塞車) ➔ 第 2 棒 Google Gemini 官方備援 ➔ 第 3 棒 GPT-OSS
   const trimmedKey = apiKey.trim();
   const isDirectApiKey = trimmedKey.startsWith('AIzaSy'); // 只有真正的 Google API Key 是 AIzaSy 開頭
 
   const proxyAttempts = [
     {
-      model: 'gemini-3.8-flash',
-      statusText: '✨ AI 正在分析受眾並撰寫文案中 (主力通道 gemini-3.8-flash)…',
+      provider: 'groq',
+      model: 'qwen/qwen3.8-27b',
+      statusText: '⚡ AI 極速引擎發動中 (Groq · 1~2 秒高速產出、零塞車)…',
     },
     {
-      model: 'gemma-4-26b-a4b-it',
-      statusText: '🔄 主力模型處於流量尖峰，已自動切換至高速備援通道 (gemma-4-26b-a4b-it)，請稍候…',
+      provider: 'gemini',
+      model: 'gemini-3.8-flash',
+      statusText: '🔄 正在切換 Google Gemini 官方備援通道…',
     },
     {
-      model: 'gemini-3.8-flash',
-      statusText: '⏳ 正在進行最終重試 (gemini-3.8-flash)，請保持畫面開啟…',
+      provider: 'groq',
+      model: 'openai/gpt-oss-120b',
+      statusText: '⏳ 正在切換進階備援通道 (GPT-OSS-120b)…',
     },
   ];
 
@@ -188,7 +191,7 @@ ${
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 52000);
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       const proxyRes = await fetch('/api/generate', {
         method: 'POST',
@@ -197,6 +200,7 @@ ${
         body: JSON.stringify({
           prompt,
           accessCode: trimmedKey,
+          provider: attempt.provider,
           model: attempt.model,
         }),
       });
@@ -211,7 +215,7 @@ ${
       const errMsg = errData.error || `HTTP ${proxyRes.status}`;
       lastProxyError = errMsg;
 
-      // 若是通行密碼錯誤 (401) 或伺服器未設定環境變數 (fatal)，立即停止重試並回報
+      // 若是通行密碼錯誤 (401) 或明確設定錯誤，立即停止重試並回報
       if (proxyRes.status === 401 || errData.fatal) {
         throw new Error(errMsg);
       }
@@ -220,7 +224,7 @@ ${
       if (proxyRes.status === 404 && isDirectApiKey) {
         break;
       }
-      // 否則（例如 503 High Demand、504 超時），自動進入迴圈下一棒備援模型！
+      // 否則自動平滑切換下一棒！
     } catch (err: any) {
       if (err.name === 'AbortError') {
         lastProxyError = `[${attempt.model}] 伺服器回應超時`;

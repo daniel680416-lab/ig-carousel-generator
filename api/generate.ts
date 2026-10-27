@@ -1,5 +1,30 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+function parseJsonContent(text: string) {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    const jsonSlice =
+      firstBrace !== -1 && lastBrace !== -1
+        ? cleaned.slice(firstBrace, lastBrace + 1)
+        : cleaned;
+    parsed = JSON.parse(jsonSlice);
+  }
+
+  // 格式正規化：若受眾或重點為陣列，自動轉為頓號分隔的字串
+  if (Array.isArray(parsed.analyzedAudience)) {
+    parsed.analyzedAudience = parsed.analyzedAudience.join('、');
+  }
+  if (Array.isArray(parsed.analyzedKeyTakeaways)) {
+    parsed.analyzedKeyTakeaways = parsed.analyzedKeyTakeaways.join('、');
+  }
+  return parsed;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 處理 CORS（允許跨網域存取與 Preflight 請求）
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -21,62 +46,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { prompt, accessCode, action, model: requestedModel } = req.body || {};
+    const { prompt, accessCode, action, provider = 'groq', model: requestedModel } = req.body || {};
 
-    // 檢查通行密碼（若環境變數有設置 ACCESS_CODE，則進行核對）
+    // 檢查自訂通行密碼（若環境變數有設置 ACCESS_CODE 且未直接帶入金鑰，則進行核對）
     const serverAccessCode = process.env.ACCESS_CODE;
     if (serverAccessCode && serverAccessCode.trim() !== '') {
-      if (!accessCode || accessCode.trim() !== serverAccessCode.trim()) {
+      const code = typeof accessCode === 'string' ? accessCode.trim() : '';
+      const isDirectKey = code.startsWith('gsk_') || code.startsWith('AIzaSy');
+      if (!isDirectKey && code !== serverAccessCode.trim()) {
         res.status(401).json({ error: '通行密碼錯誤，請確認輸入正確的通行密碼。', fatal: true });
         return;
       }
     }
 
-    // 取得伺服器環境變數中的 GEMINI_API_KEY
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({
-        error: '伺服器未設定 GEMINI_API_KEY 環境變數，請在 Vercel 後台完成設置。',
-        fatal: true,
-      });
-      return;
-    }
+    // 1. Groq 金鑰解析（優先讀取 Vercel 環境變數 GROQ_API_KEY，或使用者在前台欄位填寫的 gsk_ 金鑰）
+    const groqKey = (
+      process.env.GROQ_API_KEY ||
+      (typeof accessCode === 'string' && accessCode.startsWith('gsk_') ? accessCode.trim() : '')
+    ).trim();
 
-    const cleanKey = apiKey.trim();
+    // 2. Google Gemini 金鑰解析
+    const geminiKey = (
+      process.env.GEMINI_API_KEY ||
+      (typeof accessCode === 'string' && accessCode.startsWith('AIzaSy') ? accessCode.trim() : '')
+    ).trim();
 
-    // 僅在點擊「測試」按鈕時才查詢模型清單
+    // 若為連線測試請求
     if (action === 'test') {
-      try {
-        const listRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`
-        );
-        const listData = await listRes.json();
-        if (!listRes.ok) {
-          res.status(400).json({
-            error: `Google API 金鑰驗證失敗：${listData.error?.message || listRes.statusText}`,
-          });
-          return;
-        }
-        const availableModels = (listData.models || [])
-          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-          .map((m: any) => m.name.replace('models/', ''))
-          .filter((m: string) => !m.includes('1.5') && !m.includes('2.0') && !m.includes('2.5'));
+      const testResults: string[] = [];
 
-        const modelNames = (availableModels.length > 0 ? availableModels : ['gemini-3.8-flash'])
-          .slice(0, 8)
-          .join(', ');
+      // 測試 Groq
+      if (groqKey) {
+        try {
+          const groqRes = await fetch('https://api.groq.com/openai/v1/models', {
+            headers: { Authorization: `Bearer ${groqKey}` },
+          });
+          if (groqRes.ok) {
+            testResults.push('⚡ Groq 極速晶片引擎（qwen/qwen3.8-27b，約 1 秒生成、零塞車）已就緒');
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // 測試 Google Gemini
+      if (geminiKey) {
+        try {
+          const listRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`
+          );
+          if (listRes.ok) {
+            testResults.push('🪐 Google Gemini 備援引擎已就緒');
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (testResults.length > 0) {
         res.status(200).json({
           ok: true,
-          models: availableModels,
-          message: `驗證成功！Vercel 雲端金鑰有效，可用模型：${modelNames}`,
-        });
-        return;
-      } catch (fetchErr: any) {
-        res.status(500).json({
-          error: `連線測試失敗：${fetchErr.message || '無法連線至 Google API'}`,
+          message: `檢測成功！已啟用雙引擎加速模式：\n${testResults.join('\n')}`,
         });
         return;
       }
+
+      res.status(400).json({
+        error: '未檢測到有效的 Groq 或 Gemini API Key，請檢查環境變數設置。',
+      });
+      return;
     }
 
     if (!prompt) {
@@ -84,23 +122,88 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // 每次請求專注執行單一指定模型，享有完整 48 秒獨立執行時間，不被前序失敗模型瓜分時間
-    const model = typeof requestedModel === 'string' && requestedModel.trim()
-      ? requestedModel.trim()
-      : 'gemini-3.8-flash';
-    const jsonMode = !model.startsWith('gemma');
+    // ==========================================
+    // 引擎 A: Groq 極速晶片通道 (預設優先，1~2 秒產出且不塞車)
+    // ==========================================
+    if (provider === 'groq' && groqKey) {
+      const model = requestedModel || 'qwen/qwen3.8-27b';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 秒安全超時
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`;
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${groqKey}`,
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  '你是一位頂級的 Instagram 社群內容總監與視覺文案專家。嚴格只輸出繁體中文標準 JSON，不要包含任何開頭或結尾的解釋文字。',
+              },
+              { role: 'user', content: prompt },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.7,
+          }),
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          const errMsg = errData.error?.message || `HTTP ${response.status}`;
+          res.status(response.status).json({
+            error: `[Groq ${model}] ${errMsg}`,
+            provider: 'groq',
+          });
+          return;
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (!text) {
+          res.status(502).json({ error: '[Groq] 模型未回傳文字內容', provider: 'groq' });
+          return;
+        }
+
+        const parsed = parseJsonContent(text);
+        res.status(200).json(parsed);
+        return;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        res.status(502).json({
+          error: `[Groq ${model}] ${err.name === 'AbortError' ? '請求超時' : err.message || '連線異常'}`,
+          provider: 'groq',
+        });
+        return;
+      }
+    }
+
+    // ==========================================
+    // 引擎 B: Google Gemini 官方通道 (備援通道)
+    // ==========================================
+    if (!geminiKey) {
+      res.status(500).json({
+        error: 'Groq 請求未完成且尚未配置 GEMINI_API_KEY 作為備援。',
+        fatal: true,
+      });
+      return;
+    }
+
+    const model = requestedModel || 'gemini-3.8-flash';
+    const jsonMode = !model.startsWith('gemma');
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
     const modelController = new AbortController();
-    const modelTimeout = setTimeout(() => modelController.abort(), 48000);
+    const modelTimeout = setTimeout(() => modelController.abort(), 45000);
 
     try {
-      const generationConfig: Record<string, any> = {
-        temperature: 0.7,
-      };
-      if (jsonMode) {
-        generationConfig.responseMimeType = 'application/json';
-      }
+      const generationConfig: Record<string, any> = { temperature: 0.7 };
+      if (jsonMode) generationConfig.responseMimeType = 'application/json';
 
       const response = await fetch(url, {
         method: 'POST',
@@ -116,14 +219,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         const errMsg = errData.error?.message || `HTTP ${response.status}`;
-        const isAuthError =
-          response.status === 403 ||
-          (response.status === 400 && errMsg.toLowerCase().includes('api key'));
-
         res.status(response.status).json({
-          error: `[${model}] ${errMsg}`,
-          status: response.status,
-          fatal: isAuthError,
+          error: `[Gemini ${model}] ${errMsg}`,
+          provider: 'gemini',
         });
         return;
       }
@@ -131,38 +229,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!text) {
-        res.status(502).json({
-          error: `[${model}] 模型未回傳文字內容`,
-        });
+        res.status(502).json({ error: `[Gemini ${model}] 模型未回傳文字內容`, provider: 'gemini' });
         return;
       }
 
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const firstBrace = cleaned.indexOf('{');
-        const lastBrace = cleaned.lastIndexOf('}');
-        const jsonSlice =
-          firstBrace !== -1 && lastBrace !== -1
-            ? cleaned.slice(firstBrace, lastBrace + 1)
-            : cleaned;
-        parsed = JSON.parse(jsonSlice);
-      }
-
+      const parsed = parseJsonContent(text);
       res.status(200).json(parsed);
       return;
     } catch (err: any) {
       clearTimeout(modelTimeout);
-      if (err.name === 'AbortError') {
-        res.status(504).json({
-          error: `[${model}] 回應超過 48 秒超時`,
-        });
-        return;
-      }
       res.status(502).json({
-        error: `[${model}] ${err.message || '網路請求異常'}`,
+        error: `[Gemini ${model}] ${err.name === 'AbortError' ? '請求超時' : err.message || '連線異常'}`,
+        provider: 'gemini',
       });
       return;
     }

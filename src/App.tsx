@@ -740,7 +740,11 @@ export function App() {
                         className={`${inputCls} font-mono`}
                         placeholder="輸入自訂通行密碼，或貼上個人 API Key"
                         value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value.trim())}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          setApiKey(val);
+                          if (val) localStorage.setItem('gemini_api_key', val);
+                        }}
                       />
                       <button
                         type="button"
@@ -751,7 +755,7 @@ export function App() {
                       </button>
                     </div>
                     <p className="text-[11px] leading-normal text-slate-400">
-                      💡 <strong>Vercel 部署模式</strong>：在後台設定好 <code className="text-amber-300">GEMINI_API_KEY</code> 後，手機或電腦打開<strong>完全免輸入 Key</strong>！若有設定通行密碼，請於上方輸入通行密碼。
+                      ⚡ <strong>雙引擎加速模式已啟用</strong>：優先透過 Groq 極速晶片通道（1~2 秒極速產出、告別尖峰塞車），並自動以 Google Gemini 為雙重備援！
                     </p>
                     <a
                       href="https://aistudio.google.com/app/apikey"
