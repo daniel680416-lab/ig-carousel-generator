@@ -470,7 +470,9 @@ export function App() {
         const blob = await canvasToBlob(canvas);
         if (blob) zip.file(`IG-Carousel-0${i + 1}.${format}`, blob);
       }
-      zip.file('IG-Caption.txt', content.caption);
+      // 加入 UTF-8 BOM (\uFEFF) 與正規化換行，確保 Windows 記事本與手機預覽繁體中文及 Emoji 絕不出現亂碼
+      const utf8Caption = '\uFEFF' + content.caption.replace(/\r?\n/g, '\r\n');
+      zip.file('IG-Caption.txt', utf8Caption);
       const out = await zip.generateAsync({ type: 'blob' });
       saveAs(out, `IG-Carousel-${Date.now()}.zip`);
     } catch (err) {
