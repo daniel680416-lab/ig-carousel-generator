@@ -470,9 +470,18 @@ export function App() {
         const blob = await canvasToBlob(canvas);
         if (blob) zip.file(`IG-Carousel-0${i + 1}.${format}`, blob);
       }
-      // 加入 UTF-8 BOM (\uFEFF) 與正規化換行，確保 Windows 記事本與手機預覽繁體中文及 Emoji 絕不出現亂碼
-      const utf8Caption = '\uFEFF' + content.caption.replace(/\r?\n/g, '\r\n');
-      zip.file('IG-Caption.txt', utf8Caption);
+      // 使用 Windows 官方標準的 UTF-16LE + BOM (0xFF, 0xFE) 編碼
+      // Windows 記事本與系統文字編輯器能 100% 自動辨識 UTF-16LE，絕不誤判為 Big5/ANSI，完美顯示所有繁中、Emoji 與標點
+      const textToSave = content.caption.replace(/\r?\n/g, '\r\n');
+      const utf16Bytes = new Uint8Array((textToSave.length + 1) * 2);
+      utf16Bytes[0] = 0xff; // UTF-16LE BOM
+      utf16Bytes[1] = 0xfe;
+      for (let i = 0; i < textToSave.length; i++) {
+        const code = textToSave.charCodeAt(i);
+        utf16Bytes[(i + 1) * 2] = code & 0xff;
+        utf16Bytes[(i + 1) * 2 + 1] = (code >> 8) & 0xff;
+      }
+      zip.file('IG-Caption.txt', utf16Bytes);
       const out = await zip.generateAsync({ type: 'blob' });
       saveAs(out, `IG-Carousel-${Date.now()}.zip`);
     } catch (err) {
