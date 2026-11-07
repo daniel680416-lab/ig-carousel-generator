@@ -9,6 +9,48 @@ export type LayoutMode =
 export type FontStyle = 'modern' | 'warm' | 'elegant';
 export type ExportFormat = 'png' | 'jpg';
 export type CtaGoal = 'keyword' | 'signup' | 'save' | 'engage' | 'urgency';
+export type CopyStyle = 'xiaohongshu' | 'professional' | 'storytelling';
+
+export const COPY_STYLES: {
+  id: CopyStyle;
+  label: string;
+  badge: string;
+  desc: string;
+  promptGuidance: string;
+}[] = [
+  {
+    id: 'xiaohongshu',
+    label: '小紅書爆款風',
+    badge: '🔥 推薦',
+    desc: '強烈情緒鉤子 · 閨蜜親測語氣 · 高互動率',
+    promptGuidance: `【風格要求：正宗小紅書種草爆款體（強烈推薦）】：
+- 標題與封面：使用小紅書爆款情緒鉤子標題，多用反差感、懸念或好物推薦（例如：「聽勸！新手千萬別…」、「被問爆的私藏秘訣」、「後悔沒有早點知道」），直擊人心！
+- 語氣特徵：像私藏乾貨給好閨蜜／同好的親切語氣，帶點真誠分享感，絕對不要教科書或死板的官方公關腔。
+- 內文節奏：短句節奏輕快、適量使用精準生活感 Emoji（✨、😭、👀、📌、⚠️），段落分明。
+- 痛點與解法：將盲點寫得極具共鳴（「是不是每次都…」），解法寫得像「偷跑秘技」。
+- 結尾與互動：引導「先碼住/收藏防走丟」、「評論區蹲一個課友/同好」，營造極佳的社群互動氛圍。`,
+  },
+  {
+    id: 'professional',
+    label: '專業講師風',
+    badge: '💼 權威',
+    desc: '清晰乾貨 · 系統架構 · 品牌信任感',
+    promptGuidance: `【風格要求：專業導師與知識型創作者體】：
+- 標題與封面：清晰有力、定位精確，強調實戰方法論與系統化學習價值。
+- 語氣特徵：專業、自信、值得信賴的導師口吻，條理清晰。
+- 內文節奏：結構嚴謹、條列分明，重點突出，適合注重學習成果與專業深度的讀者。`,
+  },
+  {
+    id: 'storytelling',
+    label: '學員故事風',
+    badge: '💬 共鳴',
+    desc: '真實心路歷程 · 前後對比 · 情感共振',
+    promptGuidance: `【風格要求：真實蛻變故事與情感共鳴體】：
+- 標題與封面：以「真實學員轉變／從0到1」的視角切入，引發同理心。
+- 語氣特徵：真實、真誠、富有情感溫度，強調從「卡關/自我懷疑」到「突破/找回自信」的心路歷程。
+- 內文節奏：故事化鋪陳，適合引發強烈情感共鳴與深度轉化。`,
+  },
+];
 
 export const CTA_GOALS: {
   id: CtaGoal;

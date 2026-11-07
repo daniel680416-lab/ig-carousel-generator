@@ -23,10 +23,11 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { CTA_GOALS } from './types';
+import { COPY_STYLES, CTA_GOALS } from './types';
 import type {
   BrandInfo,
   CardTheme,
+  CopyStyle,
   CropFocus,
   CtaGoal,
   ExportFormat,
@@ -176,6 +177,7 @@ export function App() {
   const [keyTakeaways, setKeyTakeaways] = useState('');
   const [ctaGoal, setCtaGoal] = useState<CtaGoal>('keyword');
   const [ctaDetail, setCtaDetail] = useState('');
+  const [copyStyle, setCopyStyle] = useState<CopyStyle>('xiaohongshu');
 
   const [images, setImages] = useState<string[]>(DEFAULT_PREVIEW_IMAGES);
   const [focuses, setFocuses] = useState<CropFocus[]>(() =>
@@ -359,7 +361,8 @@ export function App() {
         keyTakeaways,
         ctaGoal,
         ctaDetail,
-        (msg) => setStatusMsg(msg)
+        (msg) => setStatusMsg(msg),
+        copyStyle
       );
       setContent(result);
 
@@ -689,6 +692,46 @@ export function App() {
                     onChange={(e) => setKeyTakeaways(e.target.value)}
                     placeholder="例如：克服懸空恐懼、核心借力不手酸（留空由 AI 自動深度發想）"
                   />
+                </div>
+
+                {/* 文案風格切換（小紅書爆款風 / 專業講師風 / 學員故事風） */}
+                <div>
+                  <label className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-rose-400" />
+                      文案爆款風格
+                    </span>
+                    <span className="text-[11px] font-normal text-rose-300">決定文字語感與標題鉤子</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {COPY_STYLES.map((st) => {
+                      const isSelected = copyStyle === st.id;
+                      return (
+                        <button
+                          key={st.id}
+                          type="button"
+                          onClick={() => setCopyStyle(st.id)}
+                          className={`rounded-xl border p-2.5 text-left transition ${
+                            isSelected
+                              ? 'border-rose-400 bg-rose-500/15 shadow-md shadow-rose-500/10 ring-1 ring-rose-400/50'
+                              : 'border-white/10 bg-black/20 hover:border-white/25'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[12px] font-bold ${isSelected ? 'text-white' : 'text-slate-200'}`}>
+                              {st.label}
+                            </span>
+                            <span className="rounded bg-rose-500/20 px-1 py-0.5 text-[9px] font-semibold text-rose-300">
+                              {st.badge}
+                            </span>
+                          </div>
+                          <p className="mt-1 line-clamp-2 text-[10px] leading-tight text-slate-400">
+                            {st.desc}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* CTA 行動呼籲目標 (手機自适应网格) */}

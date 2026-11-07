@@ -1,5 +1,5 @@
-import { CTA_GOALS } from './types';
-import type { CtaGoal, GeneratedContent } from './types';
+import { COPY_STYLES, CTA_GOALS } from './types';
+import type { CopyStyle, CtaGoal, GeneratedContent } from './types';
 
 /**
  * 預設展示文案（當使用者尚未輸入 API Key 時，提供現成專業範本立即預覽體驗）
@@ -76,25 +76,29 @@ export async function generateCarouselContent(
   keyTakeaways?: string,
   ctaGoal: CtaGoal = 'keyword',
   ctaDetail?: string,
-  onStatus?: (msg: string) => void
+  onStatus?: (msg: string) => void,
+  copyStyle: CopyStyle = 'xiaohongshu'
 ): Promise<GeneratedContent> {
   const goal = CTA_GOALS.find((g) => g.id === ctaGoal) ?? CTA_GOALS[0];
+  const styleConfig = COPY_STYLES.find((s) => s.id === copyStyle) ?? COPY_STYLES[0];
 
   const prompt = `
-你是一位頂級的 Instagram 社群內容總監與視覺文案專家。
-請根據以下課程/主題資訊，快速完成受眾與痛點設定，並為 Instagram 設計「4 張 1:1 輪播圖（Carousel）」的精準卡片文案與「IG 發文文案（Caption）」。請無需冗長推論，直接輸出最終 JSON 結果。
+你是一位頂級的社群內容總監與視覺文案專家。
+請根據以下課程/主題資訊與【風格要求】，為 Instagram / 小紅書設計「4 張 1:1 輪播圖（Carousel）」的精準卡片文案與「爆款發文文案（Caption）」。請無需冗長推論，直接輸出最終 JSON 結果。
 
 【課程主題】：${topic}
+
+${styleConfig.promptGuidance}
 
 【1. 受眾與痛點設定】：
 ${
   !audience?.trim()
-    ? '- 目標受眾（未指定）：請直接設定最適合此主題的受眾畫像（15~25字），填入 "analyzedAudience"（例：「久坐上班族、運動新手、想改善體態的初學者」）。'
+    ? '- 目標受眾（未指定）：請依上述風格設定最適合此主題的精準受眾畫像（15~25字），填入 "analyzedAudience"（例：「久坐上班族、運動新手、想改善體態的初學者」）。'
     : `- 目標受眾：「${audience.trim()}」，請填入 "analyzedAudience"。`
 }
 ${
   !keyTakeaways?.trim()
-    ? '- 重點痛點（未指定）：請直接列出該主題學員最常見的 3 大盲點與突破解法（20~35字），填入 "analyzedKeyTakeaways"（例：「克服懸空恐懼、核心借力不手酸、優雅舒展肩頸」）。'
+    ? '- 重點痛點（未指定）：請依上述風格直接列出該主題學員最常見的 3 大盲點與突破解法（20~35字），填入 "analyzedKeyTakeaways"（例：「克服懸空恐懼、核心借力不手酸、優雅舒展肩頸」）。'
     : `- 重點痛點：「${keyTakeaways.trim()}」，請填入 "analyzedKeyTakeaways"。`
 }
 
@@ -109,17 +113,17 @@ ${
 - 條列要點（bulletPoints）：每點必須極致精簡在 6~12 字以內（短語即可，例如「手臂過度用力代償」、「骨盆未正導致晃動」），嚴禁長篇大論！
 - CTA 按鈕（ctaButton）：12 字以內短語。
 
-【4 張輪播圖結構要求（需緊扣上述受眾與痛點）】：
-- Slide 1 (封面 Hook)：爆款吸睛大標題（10~14字）、好奇副標、亮點標籤。
+【4 張輪播圖結構要求（需緊扣上述受眾、痛點與風格）】：
+- Slide 1 (封面 Hook)：爆款吸睛大標題（10~14字，具強烈好奇感或反差）、副標、亮點標籤。
 - Slide 2 (痛點共鳴)：直接點出學員常犯的 3 個盲點/困擾，條列 3 點極短 bulletPoints。
 - Slide 3 (核心解法)：介紹 3 大關鍵技巧/價值突破，條列 3 點極短 bulletPoints。
 - Slide 4 (行動呼籲 CTA)：依上述 CTA 目標，提供極簡 ctaButton 文字。
 
-【IG 發文貼文 (caption) 要求】：
+【社群發文貼文 (caption) 要求】：
 - 具有吸引人的前 2~3 行鉤子標題（防止被截斷）
-- 豐富的 Emoji 與清晰換行分段
+- 豐富的 Emoji 與清晰換行分段，完全符合【${styleConfig.label}】的語氣節奏
 - 條列式整理貼文重點（呼應受眾痛點與解法）
-- 結尾使用上述 CTA 目標的引導方式，並搭配收藏或留言的互動提醒
+- 結尾使用上述 CTA 目標的引導方式，並搭配收藏、互動或留言提醒
 - Hashtags 標籤「嚴格限制剛好 5 個精準度最高、與主題最密切相關」的繁體中文標籤（不多不少，僅保留最關鍵的 5 個核心 Hashtag）。
 
 【輸出格式】：
