@@ -110,6 +110,11 @@ export interface SlideData {
   bulletPoints?: string[];
   ctaButton?: string;
   footnote?: string;
+
+  // 單頁專屬版型覆寫與位置微調
+  customLayout?: LayoutMode;
+  customPosition?: 'top' | 'center' | 'bottom';
+  customAlign?: 'left' | 'center' | 'right';
 }
 
 export interface GeneratedContent {

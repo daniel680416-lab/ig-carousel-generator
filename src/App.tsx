@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   KeyRound,
   Layers,
+  LayoutGrid,
   Loader2,
   Move,
   Palette,
@@ -958,20 +959,109 @@ export function App() {
             </Step>
 
             {/* 5 微調文字 */}
-            <Step n={5} title={`微調第 ${activeSlide + 1} 張文字`} icon={<FileText className="h-4 w-4 text-indigo-300" />}>
-              <div className="mb-3 flex gap-1.5">
-                {[0, 1, 2, 3].map((i) => (
+            <Step n={5} title={`微調第 ${activeSlide + 1} 張文字與版型`} icon={<FileText className="h-4 w-4 text-indigo-300" />}>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex gap-1.5">
+                  {[0, 1, 2, 3].map((i) => (
+                    <button
+                      key={i}
+                      onClick={() => setActiveSlide(i)}
+                      className={`h-8 w-8 rounded-lg text-xs font-bold transition ${
+                        activeSlide === i ? 'bg-white text-slate-900 shadow-md' : 'bg-white/10 text-slate-300 hover:bg-white/15'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                {(slide.customLayout || slide.customPosition || slide.customAlign) && (
                   <button
-                    key={i}
-                    onClick={() => setActiveSlide(i)}
-                    className={`h-8 w-8 rounded-lg text-xs font-bold transition ${
-                      activeSlide === i ? 'bg-white text-slate-900' : 'bg-white/10 text-slate-300 hover:bg-white/15'
-                    }`}
+                    onClick={() => updateSlide(activeSlide, { customLayout: undefined, customPosition: undefined, customAlign: undefined })}
+                    className="flex items-center gap-1 text-[11px] text-fuchsia-300 hover:text-fuchsia-200 transition"
                   >
-                    {i + 1}
+                    <RotateCcw className="h-3 w-3" />
+                    重設版型
                   </button>
-                ))}
+                )}
               </div>
+
+              {/* 單張專屬版型與位置設定 */}
+              <div className="mb-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3 space-y-2.5 shadow-inner">
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <LayoutGrid className="h-3.5 w-3.5 text-fuchsia-400" />
+                      第 {activeSlide + 1} 張專屬版型
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      {slide.customLayout ? '已自訂' : `跟隨第3步（${LAYOUT_OPTIONS.find((l) => l.id === layout)?.label}）`}
+                    </span>
+                  </div>
+                  <select
+                    className={`${inputCls} py-1.5 text-xs bg-slate-900/90`}
+                    value={slide.customLayout || ''}
+                    onChange={(e) => updateSlide(activeSlide, { customLayout: (e.target.value || undefined) as LayoutMode | undefined })}
+                  >
+                    <option value="">跟隨全域預設（{LAYOUT_OPTIONS.find((l) => l.id === layout)?.label}）</option>
+                    {LAYOUT_OPTIONS.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.label} - {l.desc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/5">
+                  <div>
+                    <span className="mb-1 block text-[11px] font-medium text-slate-400">文字垂直位置</span>
+                    <div className="flex rounded-lg bg-black/40 p-0.5 border border-white/10">
+                      {(['top', 'center', 'bottom'] as const).map((pos) => {
+                        const currentPos = slide.customPosition || 'bottom';
+                        const labels = { top: '頂部', center: '置中', bottom: '底部' };
+                        return (
+                          <button
+                            key={pos}
+                            type="button"
+                            onClick={() => updateSlide(activeSlide, { customPosition: pos })}
+                            className={`flex-1 py-1 text-[11px] font-medium rounded-md transition ${
+                              currentPos === pos
+                                ? 'bg-fuchsia-500/25 text-fuchsia-200 border border-fuchsia-400/40 shadow-sm'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            {labels[pos]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="mb-1 block text-[11px] font-medium text-slate-400">文字水平對齊</span>
+                    <div className="flex rounded-lg bg-black/40 p-0.5 border border-white/10">
+                      {(['left', 'center', 'right'] as const).map((align) => {
+                        const currentAlign = slide.customAlign || 'left';
+                        const labels = { left: '靠左', center: '置中', right: '靠右' };
+                        return (
+                          <button
+                            key={align}
+                            type="button"
+                            onClick={() => updateSlide(activeSlide, { customAlign: align })}
+                            className={`flex-1 py-1 text-[11px] font-medium rounded-md transition ${
+                              currentAlign === align
+                                ? 'bg-sky-500/25 text-sky-200 border border-sky-400/40 shadow-sm'
+                                : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            {labels[align]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2.5">
                 <input className={inputCls} placeholder="標籤" value={slide.tag} onChange={(e) => updateSlide(activeSlide, { tag: e.target.value })} />
                 <textarea rows={2} className={`${inputCls} resize-none`} placeholder="主標題（可換行）" value={slide.title} onChange={(e) => updateSlide(activeSlide, { title: e.target.value })} />

@@ -385,6 +385,7 @@ interface ContentStyle {
   palette: Palette;
   scale: number;
   showSubtitleWithBullets: boolean;
+  align?: 'left' | 'center' | 'right';
 }
 
 /**
@@ -403,6 +404,7 @@ function drawContent(
   const f = FONT_STYLES[st.fontStyle];
   const p = st.palette;
   const s = st.scale;
+  const align = st.align || 'left';
   let y = top;
 
   const shadowOn = () => {
@@ -427,12 +429,13 @@ function drawContent(
     ctx.font = fontString(700, Math.round(22 * s), f.body);
     const tw = ctx.measureText(slide.tag).width + 32 * s;
     if (draw) {
+      const tagX = align === 'center' ? x + (w - tw) / 2 : align === 'right' ? x + w - tw : x;
       ctx.beginPath();
-      ctx.roundRect(x, y, tw, th, th / 2);
+      ctx.roundRect(tagX, y, tw, th, th / 2);
       ctx.fillStyle = p.tagBg;
       ctx.fill();
       ctx.fillStyle = p.tagText;
-      ctx.fillText(slide.tag, x + 16 * s, y + th / 2 + 1);
+      ctx.fillText(slide.tag, tagX + 16 * s, y + th / 2 + 1);
     }
     y += th + 24 * s;
   }
@@ -451,6 +454,8 @@ function drawContent(
     const lh = fit.size * 1.26;
     ctx.font = fontString(f.headingWeight, fit.size, f.heading);
     ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = align;
+    const textTargetX = align === 'center' ? x + w / 2 : align === 'right' ? x + w : x;
     for (const line of fit.lines) {
       if (draw) {
         shadowOn();
@@ -459,13 +464,14 @@ function drawContent(
           ctx.lineJoin = 'round';
           ctx.lineWidth = f.headingStroke;
           ctx.strokeStyle = p.title;
-          ctx.strokeText(line, x, y + fit.size);
+          ctx.strokeText(line, textTargetX, y + fit.size);
         }
-        ctx.fillText(line, x, y + fit.size);
+        ctx.fillText(line, textTargetX, y + fit.size);
         shadowOff();
       }
       y += lh;
     }
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     y += 10 * s;
   }
@@ -485,15 +491,18 @@ function drawContent(
     );
     const lh = fit.size * 1.5;
     ctx.font = fontString(f.bodyWeight, fit.size, f.body);
+    ctx.textAlign = align;
+    const subTargetX = align === 'center' ? x + w / 2 : align === 'right' ? x + w : x;
     for (const line of fit.lines) {
       if (draw) {
         shadowOn();
         ctx.fillStyle = p.sub;
-        ctx.fillText(line, x, y + lh / 2);
+        ctx.fillText(line, subTargetX, y + lh / 2);
         shadowOff();
       }
       y += lh;
     }
+    ctx.textAlign = 'left';
     y += 12 * s;
   }
 
@@ -577,7 +586,10 @@ function drawContent(
     if (draw) {
       shadowOn();
       ctx.fillStyle = p.muted;
-      ctx.fillText(text, x, y + 14 * s);
+      ctx.textAlign = align;
+      const fnX = align === 'center' ? x + w / 2 : align === 'right' ? x + w : x;
+      ctx.fillText(text, fnX, y + 14 * s);
+      ctx.textAlign = 'left';
       shadowOff();
     }
     y += 34 * s;
@@ -827,7 +839,8 @@ function drawPosterFrame(
   slide: SlideData,
   fontStyle: FontStyle,
   p: Palette,
-  focus: CropFocus
+  focus: CropFocus,
+  position: 'top' | 'center' | 'bottom' = 'bottom'
 ) {
   const f = FONT_STYLES[fontStyle];
   const frameInset = 36;
@@ -904,7 +917,14 @@ function drawPosterFrame(
   else if (slide.footnote) contentH += 36;
 
   const cardH = contentH + pad * 2;
-  const cardY = SIZE - 56 - cardH;
+  let cardY: number;
+  if (position === 'top') {
+    cardY = frameInset + 24;
+  } else if (position === 'center') {
+    cardY = (SIZE - cardH) / 2;
+  } else {
+    cardY = SIZE - 56 - cardH;
+  }
 
   // 繪製毛玻璃卡片
   drawFrostedCard(ctx, img, focus, cardX, cardY, cardW, cardH, 32, p);
@@ -1065,7 +1085,11 @@ export async function renderSlideToCanvas(
   ctx.imageSmoothingQuality = 'high';
 
   const theme = THEME_CONFIGS[options.theme] ?? THEME_CONFIGS['dark-glass'];
-  const layout = options.layout;
+  // 支援單頁覆寫版型 (customLayout)，若無設定則套用步驟 3 的全域 layout
+  const layout = slide.customLayout || options.layout;
+  const position = slide.customPosition || 'bottom';
+  const align = slide.customAlign || 'left';
+
   const isCard =
     layout === 'compact-card' ||
     layout === 'center-card' ||
@@ -1086,18 +1110,50 @@ export async function renderSlideToCanvas(
       palette,
       scale: 1,
       showSubtitleWithBullets: false,
+      align,
     };
     const w = SIZE - marginX * 2;
     const h = drawContent(ctx, slide, 0, 0, w, style, false);
-    const bottomPad = 64;
-    const top = SIZE - bottomPad - h;
-    const g = ctx.createLinearGradient(0, top - 190, 0, SIZE);
-    g.addColorStop(0, 'rgba(8,12,24,0)');
-    g.addColorStop(0.4, 'rgba(8,12,24,0.55)');
-    g.addColorStop(0.75, 'rgba(8,12,24,0.82)');
-    g.addColorStop(1, 'rgba(8,12,24,0.92)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, top - 190, SIZE, SIZE - top + 190);
+
+    let top: number;
+    let gradTop: number;
+    let gradBottom: number;
+
+    if (position === 'top') {
+      top = hasBrand ? 128 : 64;
+      gradTop = 0;
+      gradBottom = top + h + 160;
+      const g = ctx.createLinearGradient(0, gradTop, 0, gradBottom);
+      g.addColorStop(0, 'rgba(8,12,24,0.92)');
+      g.addColorStop(0.3, 'rgba(8,12,24,0.82)');
+      g.addColorStop(0.7, 'rgba(8,12,24,0.55)');
+      g.addColorStop(1, 'rgba(8,12,24,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, SIZE, gradBottom);
+    } else if (position === 'center') {
+      top = (SIZE - h) / 2;
+      gradTop = top - 120;
+      gradBottom = top + h + 120;
+      const g = ctx.createLinearGradient(0, gradTop, 0, gradBottom);
+      g.addColorStop(0, 'rgba(8,12,24,0)');
+      g.addColorStop(0.3, 'rgba(8,12,24,0.8)');
+      g.addColorStop(0.7, 'rgba(8,12,24,0.8)');
+      g.addColorStop(1, 'rgba(8,12,24,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, gradTop, SIZE, gradBottom - gradTop);
+    } else {
+      // bottom (預設)
+      const bottomPad = 64;
+      top = SIZE - bottomPad - h;
+      const g = ctx.createLinearGradient(0, top - 190, 0, SIZE);
+      g.addColorStop(0, 'rgba(8,12,24,0)');
+      g.addColorStop(0.4, 'rgba(8,12,24,0.55)');
+      g.addColorStop(0.75, 'rgba(8,12,24,0.82)');
+      g.addColorStop(1, 'rgba(8,12,24,0.92)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, top - 190, SIZE, SIZE - top + 190);
+    }
+
     drawContent(ctx, slide, marginX, top, w, style, true);
   } else if (layout === 'corner-tag') {
     const style: ContentStyle = {
@@ -1108,17 +1164,31 @@ export async function renderSlideToCanvas(
     };
     const w = 640;
     const barW = 7;
-    const textX = marginX + barW + 22;
+    const isRight = align === 'right';
+    const textX = isRight ? SIZE - marginX - w : marginX + barW + 22;
+    const barX = isRight ? SIZE - marginX - barW : marginX;
+
     const h = drawContent(ctx, slide, 0, 0, w, style, false);
-    const top = SIZE - 72 - h;
-    const rg = ctx.createRadialGradient(0, SIZE, 40, 0, SIZE, 980);
+    let top: number;
+    if (position === 'top') {
+      top = hasBrand ? 128 : 64;
+    } else if (position === 'center') {
+      top = (SIZE - h) / 2;
+    } else {
+      top = SIZE - 72 - h;
+    }
+
+    const rx = isRight ? SIZE : 0;
+    const ry = position === 'top' ? 0 : position === 'center' ? SIZE / 2 : SIZE;
+    const rg = ctx.createRadialGradient(rx, ry, 40, rx, ry, 980);
     rg.addColorStop(0, 'rgba(6,10,20,0.88)');
     rg.addColorStop(0.55, 'rgba(6,10,20,0.5)');
     rg.addColorStop(1, 'rgba(6,10,20,0)');
     ctx.fillStyle = rg;
     ctx.fillRect(0, 0, SIZE, SIZE);
+
     ctx.beginPath();
-    ctx.roundRect(marginX, top + 4, barW, h - 8, barW / 2);
+    ctx.roundRect(barX, top + 4, barW, h - 8, barW / 2);
     ctx.fillStyle = palette.accent;
     ctx.fill();
     drawContent(ctx, slide, textX, top, w, style, true);
@@ -1128,6 +1198,7 @@ export async function renderSlideToCanvas(
       palette,
       scale: 0.92,
       showSubtitleWithBullets: false,
+      align,
     };
     const cardX = 48;
     const cardW = SIZE - cardX * 2;
@@ -1135,7 +1206,16 @@ export async function renderSlideToCanvas(
     const innerW = cardW - pad * 2;
     const h = drawContent(ctx, slide, 0, 0, innerW, style, false);
     const cardH = h + pad * 2 - 8;
-    const cardY = SIZE - 48 - cardH;
+
+    let cardY: number;
+    if (position === 'top') {
+      cardY = hasBrand ? 120 : 48;
+    } else if (position === 'center') {
+      cardY = (SIZE - cardH) / 2;
+    } else {
+      cardY = SIZE - 48 - cardH;
+    }
+
     drawFrostedCard(ctx, img, focus, cardX, cardY, cardW, cardH, 40, palette);
     drawContent(ctx, slide, cardX + pad, cardY + pad - 4, innerW, style, true);
   } else if (layout === 'center-card') {
@@ -1144,6 +1224,7 @@ export async function renderSlideToCanvas(
       palette,
       scale: 1,
       showSubtitleWithBullets: true,
+      align,
     };
     const cardX = 64;
     const cardW = SIZE - cardX * 2;
@@ -1151,13 +1232,23 @@ export async function renderSlideToCanvas(
     const innerW = cardW - pad * 2;
     const h = drawContent(ctx, slide, 0, 0, innerW, style, false);
     const cardH = Math.min(h + pad * 2 - 8, SIZE - 220);
-    const cardY = options.pageIndex === 0 ? SIZE - cardH - 96 : (SIZE - cardH) / 2 + 24;
+
+    let cardY: number;
+    if (position === 'top') {
+      cardY = hasBrand ? 120 : 56;
+    } else if (position === 'bottom') {
+      cardY = SIZE - cardH - 64;
+    } else {
+      // center
+      cardY = options.pageIndex === 0 ? SIZE - cardH - 96 : (SIZE - cardH) / 2 + 24;
+    }
+
     drawFrostedCard(ctx, img, focus, cardX, cardY, cardW, cardH, 44, palette);
     drawContent(ctx, slide, cardX + pad, cardY + pad - 4, innerW, style, true);
   } else if (layout === 'magazine-split') {
     drawMagazineSplit(ctx, slide, fontStyle, palette, hasBrand);
   } else if (layout === 'poster-frame') {
-    drawPosterFrame(ctx, img, slide, fontStyle, palette, focus);
+    drawPosterFrame(ctx, img, slide, fontStyle, palette, focus, position);
   }
 
   // 3. 品牌（若有設定才繪製）
